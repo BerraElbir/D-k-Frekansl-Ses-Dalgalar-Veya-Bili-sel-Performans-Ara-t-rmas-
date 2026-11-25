@@ -1,0 +1,1 @@
+# D-k-Frekansl-Ses-Dalgalar-Veya-Bili-sel-Performans-Ara-t-rmas-
