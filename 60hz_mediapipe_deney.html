@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>60 Hz Akustik Gürültü – Bilişsel ve Davranışsal Ölçüm Aracı</title>
+<style>
+:root{--bg:#eef2f1;--panel:#fff;--ink:#16302b;--mut:#5d716d;--line:#cfdad7;--acc:#0b6e69;--go:#1f9d55;--no:#c8372d}
+@media(prefers-color-scheme:dark){:root{--bg:#0f1b19;--panel:#17272a;--ink:#e3efec;--mut:#93aaa5;--line:#2b4044;--acc:#4fd1c5}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.55 "Segoe UI",system-ui,sans-serif;padding:20px}
+main{max-width:1000px;margin:0 auto;display:grid;gap:16px}
+h1{font:700 1.5rem/1.2 Georgia,serif;margin:0}
+h2{font:600 1.05rem Georgia,serif;margin:0 0 10px}
+.p{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:16px}
+.row{display:flex;flex-wrap:wrap;gap:12px;align-items:end}
+label{display:grid;gap:3px;font-size:.85rem;color:var(--mut)}
+input,select,button{font:inherit;padding:7px 10px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink)}
+button{background:var(--acc);color:#fff;border:0;cursor:pointer}
+button:disabled{opacity:.4;cursor:not-allowed}button.s{background:var(--bg);color:var(--ink);border:1px solid var(--line)}
+.g{display:grid;grid-template-columns:320px 1fr;gap:16px}
+@media(max-width:760px){.g{grid-template-columns:1fr}}
+.cam{position:relative;width:100%;aspect-ratio:4/3;background:#000;border-radius:6px;overflow:hidden}
+.cam video,.cam canvas{position:absolute;inset:0;width:100%;height:100%;transform:scaleX(-1)}
+#arena{height:230px;display:grid;place-items:center;background:var(--bg);border-radius:6px;border:1px dashed var(--line);text-align:center}
+#stim{width:110px;height:110px;visibility:hidden}
+#stim.go{background:var(--go);border-radius:50%}#stim.nogo{background:var(--no);border-radius:4px}
+.live{font-size:.85rem;color:var(--mut);margin-top:8px;min-height:1.3em}
+.bar{height:6px;background:var(--line);border-radius:3px;margin-top:10px}.bar i{display:block;height:100%;width:0;background:var(--acc);border-radius:3px}
+table{border-collapse:collapse;width:100%;font-size:.85rem}th,td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:right}
+th:first-child,td:first-child{text-align:left}.sc{overflow-x:auto}
+small{color:var(--mut)}
+</style>
+</head>
+<body>
+<main>
+<div>
+<h1>60 Hz düşük frekanslı ses: karar verme, dürtüsellik ve dikkat</h1>
+<small>9. sınıf öğrencileri için Klavyesiz Go/No-Go görevi: yanıt, MediaPipe ile kameradan el hareketiyle algılanır</small>
+</div>
+
+<section class="p">
+<h2>Kurulum</h2>
+<div class="row">
+<label>Katılımcı kodu<input id="pid" value="K01" size="6"></label>
+<label>Ses koşulu<select id="cond"><option>Sessiz</option><option>60 Hz</option></select></label>
+<label>Blok sayısı<input id="nb" type="number" value="3" min="1" max="6" style="width:70px"></label>
+<label>Blok başına deneme<input id="nt" type="number" value="40" min="8" max="100" style="width:90px"></label>
+<label>60 Hz ses düzeyi (0–1)<input id="vol" type="number" value="0.3" min="0" max="1" step="0.05" style="width:90px"></label>
+<button class="s" id="tone">3 sn ses testi</button>
+</div>
+<div class="live">Koşul sırasını dengeleyin: tek numaralı katılımcılar Sessiz → 60 Hz, çift numaralılar 60 Hz → Sessiz. Gerçek 55–60 dB düzeyi için kulak hizasında ses ölçer (dB(C) veya dB(Z)) ve bas hoparlör gerekir; dizüstü hoparlörü 60 Hz’i çalamaz.</div>
+</section>
+
+<section class="p g">
+<div>
+<div class="cam"><video id="v" playsinline muted></video><canvas id="ov" width="640" height="480"></canvas></div>
+<div class="row" style="margin-top:10px">
+<button id="camBtn">Kamerayı aç</button>
+<button id="startBtn" disabled>Görevi başlat</button>
+</div>
+<div class="live" id="st">Önce kamerayı açın (model internetten yüklenir; görüntü cihazdan çıkmaz).</div>
+<div class="live" id="live"></div>
+<div class="live" id="hand"></div>
+</div>
+<div>
+<div id="arena"><div id="msg">Elinizi kameraya gösterin. Yeşil daireyi görünce baş ve işaret parmağınızı birleştirin (sıkıştırın), sonra açın. Kırmızı kareyi görünce hiçbir şey yapmayın.</div><div id="stim"></div></div>
+<div class="bar"><i id="prog"></i></div>
+<div class="live" id="trinfo"></div>
+</div>
+</section>
+
+<section class="p" id="resP" hidden>
+<h2>Sonuçlar</h2>
+<div class="sc"><table id="res"></table></div>
+<div class="row" style="margin-top:12px">
+<button id="dlT">Denemeler (CSV)</button><button id="dlE" class="s">Davranış olayları (CSV)</button><button id="dlS" class="s">Özet (CSV)</button>
+</div>
+<div class="live">Yanıt = başparmak ile işaret parmağının birleştiği an (kamera gecikmesi yaklaşık 30–60 ms ekler, iki koşulda da aynıdır). Tereddüt: Doğru yanıtlarda TS, medyanın 1,5 katından uzun. Duruş değişikliği: yüz genişliğinin yarısından büyük baş hareketi (1 sn içinde). Dalgınlık: 1,5 sn’den uzun süre bakışı ekrandan çevirme veya gözleri kapatma. Eşikleri pilot veriyle doğrulayın; otomatik sayımları iki gözlemcinin kodlamasıyla karşılaştırın.</div>
+</section>
+</main>
+
+<script type="module">
+import {FaceLandmarker,HandLandmarker,FilesetResolver} from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs";
+const $=i=>document.getElementById(i),sleep=ms=>new Promise(r=>setTimeout(r,ms));
+let lm,hl,running=false,block=0,cond='Sessiz',S={trials:[],events:[]},t0=0,cur=null,SUM=[];
+
+function ev(type,val){if(running)S.events.push({t_ms:Math.round(performance.now()-t0),blok:block,kosul:cond,olay:type,deger:+(+val).toFixed(2)})}
+
+/* --- Kamera ve MediaPipe --- */
+$('camBtn').onclick=async()=>{
+ try{
+  $('st').textContent='Model yükleniyor…';
+  const fs=await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm");
+  const o=d=>({baseOptions:{modelAssetPath:"https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",delegate:d},runningMode:"VIDEO",numFaces:1,outputFaceBlendshapes:true});
+  try{lm=await FaceLandmarker.createFromOptions(fs,o("GPU"))}catch(e){lm=await FaceLandmarker.createFromOptions(fs,o("CPU"))}
+  hl=await HandLandmarker.createFromOptions(fs,{baseOptions:{modelAssetPath:"https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",delegate:"CPU"},runningMode:"VIDEO",numHands:1});
+  const v=$('v');v.srcObject=await navigator.mediaDevices.getUserMedia({video:{width:640,height:480}});await v.play();
+  $('startBtn').disabled=false;$('camBtn').disabled=true;$('st').textContent='Hazır. Katılımcı yüzü kameraya dönük otursun.';loop();
+ }catch(e){$('st').textContent='Hata: '+e.message+' (internet ve kamera iznini kontrol edin)'}
+};
+let lastT=-1,hist=[],cool=0,awaySince=null,awayLog=false,lostSince=null,lostLog=false;
+function loop(){const v=$('v');
+ if(v.currentTime!==lastT){lastT=v.currentTime;const n=performance.now();analyze(lm.detectForVideo(v,n),n);hands(hl.detectForVideo(v,n),n)}
+ requestAnimationFrame(loop)}
+function analyze(r,now){
+ const c=$('ov'),x=c.getContext('2d');x.clearRect(0,0,c.width,c.height);
+ if(!r.faceLandmarks.length){
+  if(lostSince==null){lostSince=now;lostLog=false}
+  if(!lostLog&&now-lostSince>1500){lostLog=true;ev('yuz_kayip',now-lostSince)}
+  $('live').textContent='Yüz algılanmadı';return}
+ lostSince=null;
+ const l=r.faceLandmarks[0],n=l[1],w=Math.abs(l[454].x-l[234].x)||.01;
+ const yaw=(n.x-(l[234].x+l[454].x)/2)/w;
+ const b={};(r.faceBlendshapes[0]?.categories||[]).forEach(k=>b[k.categoryName]=k.score);
+ const gaze=Math.max((b.eyeLookOutLeft||0)+(b.eyeLookInRight||0),(b.eyeLookOutRight||0)+(b.eyeLookInLeft||0));
+ const blink=((b.eyeBlinkLeft||0)+(b.eyeBlinkRight||0))/2;
+ const away=Math.abs(yaw)>.22||gaze>1.1||blink>.6;
+ hist.push({t:now,x:n.x,y:n.y});while(hist[0].t<now-1000)hist.shift();
+ const d=Math.hypot(n.x-hist[0].x,n.y-hist[0].y)/w;
+ if(d>.5&&now>cool){cool=now+1500;ev('durus_degisikligi',d)}
+ if(away){if(awaySince==null){awaySince=now;awayLog=false}
+  if(!awayLog&&now-awaySince>1500){awayLog=true;ev('dalginlik',now-awaySince)}}else awaySince=null;
+ x.fillStyle=away?'#e24':'#2d6';x.beginPath();x.arc(n.x*c.width,n.y*c.height,6,0,7);x.fill();
+ $('live').textContent=`Baş yönü: ${yaw.toFixed(2)} | Hareket: ${d.toFixed(2)} | ${away?'Bakış ekran dışı':'Bakış ekranda'}`;
+}
+
+/* --- 60 Hz ses --- */
+function mkTone(vol){const ac=new AudioContext(),o=ac.createOscillator(),g=ac.createGain();o.frequency.value=60;g.gain.value=vol;o.connect(g).connect(ac.destination);o.start();return {stop(){o.stop();ac.close()}}}
+$('tone').onclick=async()=>{const t=mkTone(+$('vol').value);await sleep(3000);t.stop()};
+
+/* --- Go/No-Go --- */
+let pinched=false,handSeen=false;
+function hands(r,now){
+ const x=$('ov').getContext('2d');handSeen=r.landmarks.length>0;
+ if(!handSeen){pinched=false;$('hand').textContent='El algılanmadı: elinizi kameraya gösterin';return}
+ const l=r.landmarks[0],sz=Math.hypot(l[0].x-l[9].x,l[0].y-l[9].y)||.01,d=Math.hypot(l[4].x-l[8].x,l[4].y-l[8].y)/sz,was=pinched;
+ if(!pinched&&d<.3)pinched=true;else if(pinched&&d>.45)pinched=false;
+ [4,8].forEach(i=>{x.fillStyle=pinched?'#fc0':'#4cf';x.beginPath();x.arc(l[i].x*640,l[i].y*480,7,0,7);x.fill()});
+ $('hand').textContent='El algılandı | '+(pinched?'Parmaklar birleşik':'Parmaklar açık');
+ if(pinched&&!was&&cur&&cur.rt==null)cur.rt=Math.round(now-cur.t_on);
+}
+$('startBtn').onclick=async()=>{
+ if(!handSeen){$('st').textContent='Başlamak için elinizi kameraya gösterin ve parmaklarınızı açık tutun.';return}
+ cond=$('cond').value;const nb=+$('nb').value,nt=+$('nt').value;
+ S={trials:[],events:[]};$('resP').hidden=true;$('startBtn').disabled=true;
+ const tone=mkTone(cond==='60 Hz'?+$('vol').value:0);
+ const st=$('stim'),msg=$('msg');msg.style.display='none';
+ running=true;t0=performance.now();
+ for(block=1;block<=nb;block++){
+  const nn=Math.round(nt*.25),seq=[...Array(nt)].map((_,i)=>i>=nn);
+  for(let i=seq.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[seq[i],seq[j]]=[seq[j],seq[i]]}
+  for(let i=0;i<nt;i++){
+   const go=seq[i],tr={blok:block,kosul:cond,no:i+1,tip:go?'Go':'NoGo',rt:null,t_on:performance.now()};
+   cur=tr;st.className=go?'go':'nogo';st.style.visibility='visible';
+   await sleep(500);st.style.visibility='hidden';await sleep(900);cur=null;
+   tr.sonuc=go?(tr.rt!=null?'dogru':'atlama'):(tr.rt!=null?'aceleci_hata':'dogru_ret');
+   tr.t_on=Math.round(tr.t_on-t0);S.trials.push(tr);
+   $('prog').style.width=((block-1)*nt+i+1)/(nb*nt)*100+'%';
+   $('trinfo').textContent=`Blok ${block}/${nb} – deneme ${i+1}/${nt}`;
+   await sleep(400+Math.random()*400);
+  }
+  if(block<nb){msg.style.display='block';msg.textContent='Kısa mola. 10 saniye sonra devam edecek…';await sleep(10000);msg.style.display='none'}
+ }
+ running=false;tone.stop();msg.style.display='block';msg.textContent='Görev bitti. Teşekkürler!';
+ $('startBtn').disabled=false;results(nb);
+};
+
+/* --- Sonuçlar --- */
+const mean=a=>a.length?a.reduce((s,x)=>s+x,0)/a.length:NaN;
+const sd=a=>{if(a.length<2)return NaN;const m=mean(a);return Math.sqrt(a.reduce((s,x)=>s+(x-m)**2,0)/(a.length-1))};
+const med=a=>{const s=[...a].sort((x,y)=>x-y),m=s.length>>1;return s.length?(s.length%2?s[m]:(s[m-1]+s[m])/2):NaN};
+const f=(x,d=0)=>isNaN(x)?'–':x.toFixed(d);
+function results(nb){
+ const hitsAll=S.trials.filter(t=>t.sonuc==='dogru'&&t.tip==='Go').map(t=>t.rt),lim=1.5*med(hitsAll);
+ SUM=[];
+ for(let k=0;k<=nb;k++){
+  const T=k?S.trials.filter(t=>t.blok===k):S.trials,E=k?S.events.filter(e=>e.blok===k):S.events;
+  const hits=T.filter(t=>t.tip==='Go'&&t.rt!=null).map(t=>t.rt),go=T.filter(t=>t.tip==='Go'),ng=T.filter(t=>t.tip==='NoGo');
+  const cnt=n=>E.filter(e=>e.olay===n).length;
+  SUM.push({kosul:cond,blok:k||'Toplam',ort_TS_ms:f(mean(hits)),TS_SD:f(sd(hits)),
+   dogruluk_yuzde:f(T.filter(t=>t.sonuc.startsWith('dogru')).length/T.length*100,1),
+   aceleci_hata:ng.filter(t=>t.rt!=null).length+'/'+ng.length,atlama:go.filter(t=>t.rt==null).length,
+   tereddut:hits.filter(x=>x>lim).length,durus_degisikligi:cnt('durus_degisikligi'),dalginlik:cnt('dalginlik'),yuz_kayip:cnt('yuz_kayip')});
+ }
+ const H=['Blok','Ort. TS (ms)','TS SD','Doğruluk %','Aceleci hata','Atlama','Tereddüt','Duruş değ.','Dalgınlık','Yüz kaybı'];
+ $('res').innerHTML='<tr>'+H.map(h=>`<th>${h}</th>`).join('')+'</tr>'+SUM.map(r=>'<tr>'+Object.values(r).slice(1).map(v=>`<td>${v}</td>`).join('')+'</tr>').join('');
+ $('resP').hidden=false;
+}
+function dl(name,rows){if(!rows.length)return;const k=Object.keys(rows[0]),csv=[k.join(','),...rows.map(r=>k.map(c=>r[c]??'').join(','))].join('\n');
+ const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv'}));a.download=`${$('pid').value}_${cond.replace(' ','')}_${name}.csv`;a.click()}
+$('dlT').onclick=()=>dl('denemeler',S.trials);$('dlE').onclick=()=>dl('olaylar',S.events);$('dlS').onclick=()=>dl('ozet',SUM);
+</script>
+</body>
+</html>
